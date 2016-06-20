@@ -3,6 +3,8 @@
 
 module Kaldi
 
+using DataStructures
+
 export load_ark_matrix
 
 include("io.jl")
