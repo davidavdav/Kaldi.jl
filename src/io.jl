@@ -13,43 +13,48 @@ function uint8tofloat(x::UInt8, quantiles)
     end
 end
 
-## This loads Kaldi matrices from an ark stream.
-function load_ark_matrix(fd::IO)
-    data = OrderedDict{ASCIIString, Matrix}()
-    while !eof(fd)
-        ## parse the index
-        id = readuntil(fd, ' ')[1:end-1]
-        token = ascii(readuntil(fd, ' ')[2:end-1]) ## skip '\0'
-        if token == "BCM"
-            minvalue, range = read(fd, Float32, 2)
-            nrow, ncol = read(fd, Int32, 2)
-            ret = Array(Float32, nrow, ncol)
-            quantiles = reshape([uint16tofloat(x, minvalue, range) for x in read(fd, UInt16, 4*ncol)], (4, Int64(ncol)))
-            for j in 1:ncol
-                bytes = read(fd, UInt8, nrow)
-                for i in 1:nrow
-                    ret[i, j] = uint8tofloat(bytes[i], sub(quantiles, :, j))
-                end
+## This loads Kaldi matrices from an ark stream, one at the time
+load_ark_matrix(fd::IO) = @task while !eof(fd)
+    ## parse the index
+    id = readuntil(fd, ' ')[1:end-1]
+    token = ascii(readuntil(fd, ' ')[2:end-1]) ## skip '\0'
+    if token == "BCM"
+        minvalue, range = read(fd, Float32, 2)
+        nrow, ncol = read(fd, Int32, 2)
+        ret = Array(Float32, nrow, ncol)
+        quantiles = reshape([uint16tofloat(x, minvalue, range) for x in read(fd, UInt16, 4*ncol)], (4, Int64(ncol)))
+        for j in 1:ncol
+            bytes = read(fd, UInt8, nrow)
+            for i in 1:nrow
+                ret[i, j] = uint8tofloat(bytes[i], sub(quantiles, :, j))
             end
-            data[id] = ret
-        else
-            if token == "BFM"
-                datatype = Float32
-            elseif token == "BDM"
-                datatype = Float64
-            else
-                error("Unknown token ", token)
-            end
-            readbytes(fd, 1) == [UInt(4)] || error("Expected \\'", nbytes, "' for ", datatype)
-            nrow = Int64(read(fd, Int32))
-            readbytes(fd, 1) == [UInt(4)] || error("Expected \\'", nbytes, "' for ", datatype)
-            ncol = Int64(read(fd, Int32))
-            data[id] = reshape(read(fd, datatype, nrow*ncol), (ncol, nrow))'
         end
+        produce(id, ret)
+    else
+        if token == "BFM"
+            datatype = Float32
+        elseif token == "BDM"
+            datatype = Float64
+        else
+            error("Unknown token ", token)
+        end
+        readbytes(fd, 1) == [UInt(4)] || error("Expected \\'", nbytes, "' for ", datatype)
+        nrow = Int64(read(fd, Int32))
+        readbytes(fd, 1) == [UInt(4)] || error("Expected \\'", nbytes, "' for ", datatype)
+        ncol = Int64(read(fd, Int32))
+        produce(id, reshape(read(fd, datatype, nrow*ncol), (ncol, nrow))')
+    end
+end
+
+function load_ark_matrices(fd::IO)
+    data = OrderedDict{ASCIIString, Matrix}()
+    for (id, matrix) in load_ark_matrix(fd)
+        data[id] = matrix
     end
     return data
 end
 
+## This does no longer work.  Must be the macro that kills it
 load_ark_matrix(s::AbstractString) = open(s) do fd
     load_ark_matrix(fd)
 end
