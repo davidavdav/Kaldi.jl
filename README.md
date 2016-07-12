@@ -1,7 +1,7 @@
 # Kaldi.jl
 Julia interface to the Kaldi speech recognition suite.
 
-Currently, we can only read and write Kaldi `.ark` matrices.  Sorry---I have to start somewhere.
+Currently, we can only read and write Kaldi `.ark` matrices, and read a nnet2 binary acoustic model.  Sorry---I have to start somewhere.
 
 ## Install
 
@@ -36,6 +36,16 @@ save_ark_matrix(f, keys::Vector{AbstractString}, values::Vector{Matrix{AbstractF
 This is the reverse of loading a `.ark` matrix.  `d` can be a normal (unordered) dict, but this leads to an arbitrary storage order of the matrices in the `.ark` file.  Kaldi often works with (promises) of lexicographically ordered keys.  The second version allows explicit control of the order of the matrices without having to use an `OrderedDict`.
 
 Only matirces of type `Float32` and `Float64` are supported.
+
+## Reading a nnet2 neural net acoustical model
+
+We now have rudimentary support for reading (binary) `nnet-am` files in Dan Povey's nnet2 implementation.
+```julia
+nnetam = open("final.mdl") do fd
+    load_nnet_am(fd)
+end
+```
+This reads a tuple `(transition_model, nnet2)` into `nnetam`.
 
 ## Plans
 

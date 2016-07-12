@@ -104,7 +104,7 @@ end
 
 ## nnet2 reading, we might want to rewrite some of the above code using routine below...
 
-function load_nnet(io::IO)
+function load_nnet_am(io::IO)
     tm = load_transition_model(io)
     nnet = load_am_nnet(io)
     return tm, nnet
@@ -154,10 +154,8 @@ function load_am_nnet(io::IO)
     expecttoken(io, "<Components>")
     ## take care of type names, strip off "Kalid." prefix and type parameters
     componentdict = [replace(split(string(t),".")[end], r"{\w+}", "")  => t for t in subtypes(NnetComponent)]
-    println(componentdict)
     for i in 1:n
         kind = readtoken(io)[2:end-1]
-        println(kind)
         kind ∈ keys(componentdict) || error("Unknown Nnet component ", kind)
         push!(components, load_nnet_component(io, componentdict[kind]))
         expecttoken(io, "</$kind>")
@@ -245,7 +243,6 @@ function load_nnet_component(io::IO, ::Type{SoftmaxComponent})
     value_sum = read_kaldi_array(io, "<ValueSum>")
     deriv_sum = read_kaldi_array(io, "<DerivSum>")
     count = readint(io, "<Count>")
-    println(typeof((dim, value_sum, deriv_sum, count)))
     return SoftmaxComponent(dim, value_sum, deriv_sum, count)
 end
 
