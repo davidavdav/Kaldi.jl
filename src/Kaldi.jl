@@ -7,6 +7,7 @@ using DataStructures
 
 export load_ark_matrix, save_ark_matrix
 
+include("types.jl")
 include("io.jl")
 
 end
