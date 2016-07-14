@@ -1,7 +1,14 @@
-type HmmState
-	pdf_class::Int32
-	transitions::Vector{Tuple{Int32, Float32}}
+type Transition{T<:AbstractFloat}
+	index::Int32
+	prob::T
 end
+Base.eltype{T}(t::Transition{T}) = T
+
+type HmmState{TT<:Transition}
+	pdf_class::Int32
+	transitions::Vector{TT}
+end
+# HmmState{TT<:Transition}(p::Int32, t::Vector{TT}) = HmmState{eltype(TT), TT}(p, t)
 
 type TopologyEntry
 	entry::Vector{HmmState}
@@ -13,17 +20,22 @@ type Triple
 	df::Int32
 end
 
-type TransitionModel
+type TransitionModel{T<:AbstractFloat}
 	topo::Vector{TopologyEntry}
 	triples::Vector{Triple}
-	log_probs::Vector{Float32}
+	log_probs::Vector{T}
 end
 
-abstract NnetComponent
+abstract NnetComponent{T}
 
 type Nnet{T}
 	components::Array{NnetComponent}
 	priors::Vector{T}
+end
+
+type NnetAM{T<:AbstractFloat}
+	trans_model::TransitionModel{T}
+	nnet::Nnet
 end
 
 type SpliceComponent <: NnetComponent

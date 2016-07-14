@@ -16,45 +16,48 @@ end
 readtoken(io::IO) = ascii(readuntil(io, ' ')[1:end-1])
 expecttoken(io::IO, token) = (t = readtoken(io)) == token || error("Expected ", token, ", saw ", t)
 
-function expectoneortwotokens(io::IO, token1, token2)
-    token = readtoken(io)
-    if token == token1
-        return expecttoken(io, token2)
-    else
-        return token == token2 || error("Expected ", token1, " or ", token2, ", saw ", token)
-    end
-end
+#function expectoneortwotokens(io::IO, token1, token2)
+#    token = readtoken(io)
+#    if token == token1
+#        return expecttoken(io, token2)
+#    else
+#        return token == token2 || error("Expected ", token1, " or ", token2, ", saw ", token)
+#    end
+#end
+
+is_binary(io::IO) = read(io, UInt8) == 0 && read(io, Char) == 'B'
 
 ## This loads Kaldi matrices from an ark stream, one at the time
-load_ark_matrix(fd::IO) = @task while !eof(fd)
+## we could probably also use code below
+load_ark_matrix(io::IO) = @task while !eof(io)
     ## parse the index
-    id = readtoken(fd)
-    token = readtoken(fd)[2:end] ## skip '\0'
-    if token == "BCM"
-        minvalue, range = read(fd, Float32, 2)
-        nrow, ncol = read(fd, Int32, 2)
+    id = readtoken(io)
+    binary = is_binary(io)
+    binary || error("Only binary format is supported yet")
+    token = readtoken(io)
+    if token == "CM" ## compressed matrix
+        minvalue, range = read(io, Float32, 2)
+        nrow, ncol = read(io, Int32, 2)
         ret = Array(Float32, nrow, ncol)
-        quantiles = reshape([uint16tofloat(x, minvalue, range) for x in read(fd, UInt16, 4*ncol)], (4, Int64(ncol)))
+        quantiles = reshape([uint16tofloat(x, minvalue, range) for x in read(io, UInt16, 4*ncol)], (4, Int64(ncol)))
         for j in 1:ncol
-            bytes = read(fd, UInt8, nrow)
+            bytes = read(io, UInt8, nrow)
             for i in 1:nrow
                 ret[i, j] = uint8tofloat(bytes[i], sub(quantiles, :, j))
             end
         end
         produce(id, ret)
     else
-        if token == "BFM"
+        if token == "FM"
             datatype = Float32
-        elseif token == "BDM"
+        elseif token == "DM"
             datatype = Float64
         else
             error("Unknown token ", token)
         end
-        readbytes(fd, 1) == [UInt(4)] || error("Expected \\'", nbytes, "' for ", datatype)
-        nrow = Int64(read(fd, Int32))
-        readbytes(fd, 1) == [UInt(4)] || error("Expected \\'", nbytes, "' for ", datatype)
-        ncol = Int64(read(fd, Int32))
-        produce(id, reshape(read(fd, datatype, nrow*ncol), (ncol, nrow))')
+        nrow = Int64(readint(io))
+        ncol = Int64(readint(io))
+        produce(id, reshape(read(io, datatype, nrow*ncol), (ncol, nrow))')
     end
 end
 
@@ -73,12 +76,12 @@ end
 
 ## save a single matrix with a key
 function save_ark_matrix{T<:AbstractFloat}(fd::IO, key::ASCIIString, value::Matrix{T})
-    write(fd, key * " \0")
+    write(fd, key * " \0B")
     nrow, ncol = size(value)
     if T == Float32
-        write(fd, "BFM ")
+        write(fd, "FM ")
     elseif T == Float64
-        write(fd, "BDM ")
+        write(fd, "DM ")
     else
         error("Unknown floating point type ", T)
     end
@@ -134,10 +137,15 @@ function load_hmm_topology(io::IO)
     for i in 1:len
         n = readint(io)
         e = Array(HmmState, n)
+        T = Any
         for j in 1:n
             pdf_class = readint(io)
-            t = [(readint(io), readfloat(io)) for k in 1:readint(io)]
-            e[j] = HmmState(pdf_class, t)
+            t = [Transition(readint(io), readfloat(io)) for k in 1:readint(io)]
+            ## we have to be carefull about the type, not sure if this is in any way more efficient...
+            if j == 1
+                T = eltype(t[1])
+            end
+            e[j] = HmmState(pdf_class, Transition{T}[x for x in t])
         end
         topo[i] = TopologyEntry(e)
     end
@@ -155,7 +163,7 @@ function load_am_nnet(io::IO)
     ## take care of type names, strip off "Kalid." prefix and type parameters
     componentdict = [replace(split(string(t),".")[end], r"{\w+}", "")  => t for t in subtypes(NnetComponent)]
     for i in 1:n
-        kind = readtoken(io)[2:end-1]
+        kind = readtoken(io)[2:end-1] ## remove < >
         kind ∈ keys(componentdict) || error("Unknown Nnet component ", kind)
         push!(components, load_nnet_component(io, componentdict[kind]))
         expecttoken(io, "</$kind>")
