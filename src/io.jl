@@ -152,6 +152,22 @@ function load_hmm_topology(io::IO)
     return topo
 end
 
+## recursive list of subtypes, I may be doing this not so efficiently
+function recursivesubtypes(t)
+    res = []
+    s = subtypes(t)
+    for tt in s
+        if length(subtypes(tt)) == 0
+            push!(res, tt)
+        else
+            for ttt in recursivesubtypes(tt)
+                push!(res, ttt)
+            end
+        end
+    end
+    return res
+end
+
 function load_nnet(io::IO)
     ## nnet
     expecttoken(io, "<Nnet>")
@@ -160,7 +176,7 @@ function load_nnet(io::IO)
     components = NnetComponent[]
     expecttoken(io, "<Components>")
     ## take care of type names, strip off "Kalid." prefix and type parameters
-    componentdict = Dict(replace(split(string(t),".")[end], r"{\w+}", "")  => t for t in subtypes(NnetComponent))
+    componentdict = Dict(replace(split(string(t),".")[end], r"{\w+}", "")  => t for t in recursivesubtypes(NnetComponent))
     for i in 1:n
         kind = readtoken(io)[2:end-1] ## remove < >
         kind ∈ keys(componentdict) || error("Unknown Nnet component ", kind)

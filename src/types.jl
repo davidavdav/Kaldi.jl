@@ -42,20 +42,22 @@ type SpliceComponent <: NnetComponent
 	input_dim::Int32
 	context::Vector{Int32}
 	const_component_dim::Int32
-	buffer::Matrix{Float32}
-	function SpliceComponent(input_dim, context, const_component_dim)
+	buffer::Matrix
+	function SpliceComponent(input_dim, context, const_component_dim, ftype=Float32)
 		var_dim = input_dim - const_component_dim
 		history_dim = 1 - -(extrema(context)...)
-		new(input_dim, context, const_component_dim, zeros(Float32, var_dim, history_dim)) ## TODO weasle in the type of the buffer, somehow
+		new(input_dim, context, const_component_dim, zeros(ftype, var_dim, history_dim)) ## TODO weasle in the type of the buffer, somehow
 	end
 end
 
-type FixedAffineComponent{T} <: NnetComponent
+abstract AbstractAffineComponent <: NnetComponent
+
+type FixedAffineComponent{T} <: AbstractAffineComponent
 	linear_params::Matrix{T}
 	bias_params::Vector{T}
 end
 
-type AffineComponentPreconditionedOnline{T} <: NnetComponent
+type AffineComponentPreconditionedOnline{T} <: AbstractAffineComponent
 	learning_rate::T
 	linear_params::Matrix{T}
 	bias_params::Vector{T}
