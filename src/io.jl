@@ -75,7 +75,7 @@ load_ark_matrix(s::AbstractString) = open(s) do fd
 end
 
 ## save a single matrix with a key
-function save_ark_matrix{T<:AbstractFloat}(fd::IO, key::ASCIIString, value::Matrix{T})
+function save_ark_matrix{T<:AbstractFloat}(fd::IO, key::String, value::Matrix{T})
     write(fd, key * " \0B")
     nrow, ncol = size(value)
     if T == Float32
@@ -108,14 +108,13 @@ end
 ## nnet2 reading, we might want to rewrite some of the above code using routine below...
 
 function load_nnet_am(io::IO)
+    is_binary(io) || error("Expected binary header, sorry")
     tm = load_transition_model(io)
-    nnet = load_am_nnet(io)
+    nnet = load_nnet(io)
     return tm, nnet
 end
 
 function load_transition_model(io::IO)
-    zb = read(io, UInt8, 2)
-    zb == ['\0', 'B'] || error("Unexpected bytes", zb)
     expecttoken(io, "<TransitionModel>")
     topo = load_hmm_topology(io)
     expecttoken(io, "<Triples>")
@@ -141,7 +140,7 @@ function load_hmm_topology(io::IO)
         for j in 1:n
             pdf_class = readint(io)
             t = [Transition(readint(io), readfloat(io)) for k in 1:readint(io)]
-            ## we have to be carefull about the type, not sure if this is in any way more efficient...
+            ## we have to be carefull about the type, not sure if this is in any
             if j == 1
                 T = eltype(t[1])
             end
@@ -153,7 +152,7 @@ function load_hmm_topology(io::IO)
     return topo
 end
 
-function load_am_nnet(io::IO)
+function load_nnet(io::IO)
     ## nnet
     expecttoken(io, "<Nnet>")
     expecttoken(io, "<NumComponents>")
@@ -161,7 +160,7 @@ function load_am_nnet(io::IO)
     components = NnetComponent[]
     expecttoken(io, "<Components>")
     ## take care of type names, strip off "Kalid." prefix and type parameters
-    componentdict = [replace(split(string(t),".")[end], r"{\w+}", "")  => t for t in subtypes(NnetComponent)]
+    componentdict = Dict(replace(split(string(t),".")[end], r"{\w+}", "")  => t for t in subtypes(NnetComponent))
     for i in 1:n
         kind = readtoken(io)[2:end-1] ## remove < >
         kind ∈ keys(componentdict) || error("Unknown Nnet component ", kind)
