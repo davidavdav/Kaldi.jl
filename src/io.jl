@@ -62,7 +62,7 @@ load_ark_matrix(io::IO) = @task while !eof(io)
 end
 
 function load_ark_matrices(fd::IO)
-    data = OrderedDict{ASCIIString, Matrix}()
+    data = OrderedDict{String, Matrix}()
     for (id, matrix) in load_ark_matrix(fd)
         data[id] = matrix
     end

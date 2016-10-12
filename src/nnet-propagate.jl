@@ -1,8 +1,19 @@
 import StatsFuns
 
-output_dim(c::SpliceComponent) = (c.input_dim - c.const_component_dim) * length(c.context) + c.const_component_dim
+## catch-all rules
+## most components don't need an init!()
+init!(c::NnetComponent) = c
+## a sequence of frames (Matrix) is processed on-by-one by default
+propagate(c::NnetComponent, x::Matrix) = mapslices(s -> propagate(c, s), x, 1)
 
 ## splice
+output_dim(c::SpliceComponent) = (c.input_dim - c.const_component_dim) * length(c.context) + c.const_component_dim
+
+function init!(c::SpliceComponent)
+	fill!(c.buffer, zero(eltype(c.buffer)))
+	return c
+end
+
 function propagate{T}(c::SpliceComponent, x::Vector{T})
 	length(x) == c.input_dim || error("Dimension mismatch")
 	var_dim = c.input_dim - c.const_component_dim
@@ -20,15 +31,17 @@ function propagate{T}(c::SpliceComponent, x::Vector{T})
 	y[dest+1:end] = x[var_dim+1:end]
 	return y
 end
-# propagate(c::SpliceComponent, x::Matrix) = mapslices(s -> propagate(c, s), x, 1)
-
-## catch-all mapslices
-propagate(c::NnetComponent, x::Matrix) = mapslices(s -> propagate(c, s), x, 1)
 
 ## affine
 ## we need to define two definitions to prevent ambiguities with the catch-all mapslices...
 propagate(c::AbstractAffineComponent, x::Vector) = c.bias_params .+ c.linear_params * x
 propagate(c::AbstractAffineComponent, x::Matrix) = c.bias_params .+ c.linear_params * x
+#function propagate{T}(c::AbstractAffineComponent, x::Matrix{T})
+#	res = zeros(T, length(c.bias_params), size(x, 2))
+#	BLAS.gemm!('N', 'N', one(T), c.linear_params, zero(T), res)
+#	broadcast!(+, res, res, c.bias_params)
+#	return res
+#end
 
 ## (group)pnorm
 function propagate{T}(c::PnormComponent, x::Vector{T})
@@ -45,3 +58,21 @@ propagate(c::FixedScaleComponent, x::Matrix) = c.scales .* x
 
 ## softmax
 propagate(c::SoftmaxComponent, x::Vector) = StatsFuns.softmax(x)
+
+## processing of the entire net
+function init!(nn::Nnet)
+	for c in nn.components
+		init!(c)
+	end
+	return nn
+end
+
+function propagate(nnet::Nnet, x::VecOrMat)
+	timing = Float64[]
+	for c in nnet.components
+		t = time()
+		x = propagate(c, x)
+		push!(timing, time()-t)
+	end
+	return x, timing
+end
