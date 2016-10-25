@@ -38,26 +38,28 @@ type NnetAM{T<:AbstractFloat}
 	nnet::Nnet
 end
 
-type Delay
+type Delay{T}
 	context::Vector{Int32}
-	buffer::AbstractMatrix
+	buffer::AbstractMatrix{T}
 	i::Int
-	function Delay(context, dim::Integer, ftype=Float32)
+	function Delay(context, dim::Integer)
 		nbuf = maximum(context) - min(minimum(context), 0)
-		new(context, zeros(ftype, dim, nbuf), 0)
+		new(context, zeros(T, dim, nbuf), 0)
 	end
 end
+Delay(context, dim::Integer, ftype=Float32) = Delay{ftype}(context, dim)
 
-type SpliceComponent <: NnetComponent
+type SpliceComponent{T} <: NnetComponent
 	input_dim::Int32
 	const_component_dim::Int32
-	delay::Delay
+	delay::Delay{T}
 	# const_delay::Delay
-	function SpliceComponent(input_dim, context, const_component_dim, ftype=Float32)
+	function SpliceComponent(input_dim, context, const_component_dim)
 		var_dim = input_dim - const_component_dim
-		new(input_dim, const_component_dim, Delay(context, input_dim, ftype))
+		new(input_dim, const_component_dim, Delay{T}(context, input_dim))
 	end
 end
+SpliceComponent(input_dim, context, const_component_dim, T::Real) = SpliceComponent{T}(input_dim, context, const_component_dim)
 
 abstract AbstractAffineComponent <: NnetComponent
 

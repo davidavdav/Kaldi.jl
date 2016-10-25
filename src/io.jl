@@ -110,7 +110,7 @@ function load_nnet_am(io::IO)
     is_binary(io) || error("Expected binary header, sorry")
     tm = load_transition_model(io)
     nnet = load_nnet(io)
-    return tm, nnet
+    NnetAM(tm, nnet)
 end
 
 function load_transition_model(io::IO)
@@ -167,7 +167,7 @@ function recursivesubtypes(t)
     return res
 end
 
-function load_nnet(io::IO)
+function load_nnet(io::IO, T=Float32)
     ## nnet
     expecttoken(io, "<Nnet>")
     expecttoken(io, "<NumComponents>")
@@ -179,7 +179,7 @@ function load_nnet(io::IO)
     for i in 1:n
         kind = readtoken(io)[2:end-1] ## remove < >
         kind ∈ keys(componentdict) || error("Unknown Nnet component ", kind)
-        push!(components, load_nnet_component(io, componentdict[kind]))
+        push!(components, load_nnet_component(io, componentdict[kind], T))
         expecttoken(io, "</$kind>")
     end
     expecttoken(io, "</Components>")
@@ -189,7 +189,7 @@ function load_nnet(io::IO)
     return Nnet(components, priors)
 end
 
-function load_nnet_component(io::IO, ::Type{SpliceComponent})
+function load_nnet_component(io::IO, ::Type{SpliceComponent}, T::Type)
     input_dim = readint(io, "<InputDim>")
     token = readtoken(io)
     if token == "<LeftContext>"
@@ -202,17 +202,17 @@ function load_nnet_component(io::IO, ::Type{SpliceComponent})
         error("Unexpected token ", token)
     end
     const_component_dim = readint(io, "<ConstComponentDim>")
-    return SpliceComponent(input_dim, context, const_component_dim)
+    return SpliceComponent{T}(input_dim, context, const_component_dim)
 end
 
-function load_nnet_component(io::IO, ::Type{FixedAffineComponent})
+function load_nnet_component(io::IO, ::Type{FixedAffineComponent}, T::Type)
     linear_params = read_kaldi_array(io, "<LinearParams>")
     bias_params = read_kaldi_array(io, "<BiasParams>")
-    t = promote_type(eltype(linear_params), eltype(bias_params))
-    return FixedAffineComponent{t}(linear_params, bias_params)
+    # t = promote_type(eltype(linear_params), eltype(bias_params))
+    return FixedAffineComponent{T}(linear_params, bias_params)
 end
 
-function load_nnet_component(io::IO, ::Type{AffineComponentPreconditionedOnline})
+function load_nnet_component(io::IO, ::Type{AffineComponentPreconditionedOnline}, T::Type)
     learning_rate = readfloat(io, "<LearningRate>")
     linear_params = read_kaldi_array(io, "<LinearParams>")
     bias_params = read_kaldi_array(io, "<BiasParams>")
@@ -237,38 +237,38 @@ function load_nnet_component(io::IO, ::Type{AffineComponentPreconditionedOnline}
     num_samples_history = readfloat(io)
     alpha = readfloat(io, "<Alpha>")
     max_change_per_sample = readfloat(io, "<MaxChangePerSample>")
-    return AffineComponentPreconditionedOnline(learning_rate, linear_params, bias_params, rank_in, rank_out, update_period, num_samples_history, alpha, max_change_per_sample)
+    return AffineComponentPreconditionedOnline{T}(learning_rate, linear_params, bias_params, rank_in, rank_out, update_period, num_samples_history, alpha, max_change_per_sample)
 end
 
-function load_nnet_component(io::IO, ::Type{PnormComponent})
+function load_nnet_component(io::IO, ::Type{PnormComponent}, T::Type)
     input_dim = readint(io, "<InputDim>")
     output_dim = readint(io, "<OutputDim>")
     p = readfloat(io, "<P>")
-    return PnormComponent(input_dim, output_dim, p)
+    return PnormComponent{T}(input_dim, output_dim, p)
 end
 
-function load_nnet_component(io::IO, ::Type{NormalizeComponent})
+function load_nnet_component(io::IO, ::Type{NormalizeComponent}, T::Type)
     dim = readint(io, "<Dim>")
     value_sum = read_kaldi_array(io, "<ValueSum>")
     deriv_sum = read_kaldi_array(io, "<DerivSum>")
     count = readint(io, "<Count>")
-    return NormalizeComponent(dim, value_sum, deriv_sum, count)
+    return NormalizeComponent{T}(dim, value_sum, deriv_sum, count)
 end
 
-function load_nnet_component(io::IO, ::Type{FixedScaleComponent})
+function load_nnet_component(io::IO, ::Type{FixedScaleComponent}, T::Type)
     scales = read_kaldi_array(io, "<Scales>")
-    return FixedScaleComponent(scales)
+    return FixedScaleComponent{T}(scales)
 end
 
-function load_nnet_component(io::IO, ::Type{SoftmaxComponent})
+function load_nnet_component(io::IO, ::Type{SoftmaxComponent}, T::Type)
     dim = readint(io, "<Dim>")
     value_sum = read_kaldi_array(io, "<ValueSum>")
     deriv_sum = read_kaldi_array(io, "<DerivSum>")
     count = readint(io, "<Count>")
-    return SoftmaxComponent(dim, value_sum, deriv_sum, count)
+    return SoftmaxComponent{T}(dim, value_sum, deriv_sum, count)
 end
 
-function load_nnet_component{C<:NnetComponent}(io::IO, ::Type{C})
+function load_nnet_component{C<:NnetComponent}(io::IO, ::Type{C}, T::Type)
     println(readtoken(io))
 end
 

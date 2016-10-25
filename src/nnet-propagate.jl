@@ -1,10 +1,8 @@
 import StatsFuns
 
 ## catch-all rules
-## most components don't need an init!()
+## most components don't need an init!() or a flush
 init!(c::NnetComponent) = c
-## a sequence of frames (Matrix) is processed on-by-one by default
-propagate(c::NnetComponent, x::Matrix) = mapslices(s -> propagate(c, s), x, 1)
 
 ## splice
 output_dim(c::SpliceComponent) = (c.input_dim - c.const_component_dim) * length(c.delay.context) + c.const_component_dim
@@ -36,8 +34,7 @@ function pushframe(d::Delay, inframe::AbstractVector)
 end
 
 function init!(c::SpliceComponent)
-	fill!(c.buffer, zero(eltype(c.buffer)))
-	c.cursor = 0
+	c.delay.i = 0
 	return c
 end
 
@@ -54,19 +51,29 @@ function propagate{T}(c::SpliceComponent, x::AbstractVector{T})
 	return vcat(yvar, yconst)
 end
 
+## We should define flush() for any component that has a delay
 function flush(c::SpliceComponent)
 	dvar = c.input_dim - c.const_component_dim
-	dummy = c.delay.buffer[:,end]
+	# delay(c) > 0 || return 
+	lastframe = c.delay.buffer[:,end]
 	y = similar(c.delay.buffer, output_dim(c), delay(c))
 	for j in 1:delay(c)
-		yvar = vcat([getframe(c.delay, j-1 + i, dummy)[1:dvar, :] for i in c.delay.context]...)
-		yconst = getframe(c.delay, j-1 + c.delay.context[1], dummy)[dvar+1:end, :]
+		yvar = vcat([getframe(c.delay, j-1 + i, lastframe)[1:dvar, :] for i in c.delay.context]...)
+		yconst = getframe(c.delay, j-1 + c.delay.context[1], lastframe)[dvar+1:end, :]
 		y[:,j] = vcat(yvar, yconst)
 	end
+	init!(c)
 	return y
 end
 
-
+function propagate(c::NnetComponent, x::AbstractMatrix, flush=false)
+	y = [propagate(c, x[:, i]) for i in 1:size(x, 2)]
+	if flush && method_exists(Kaldi.flush, (typeof(c),))
+		return hcat(y..., Kaldi.flush(c))
+	else
+		return hcat(y...)
+	end
+end
 
 ## affine
 ## we need to define two definitions to prevent ambiguities with the catch-all mapslices...
@@ -103,7 +110,7 @@ function init!(nn::Nnet)
 	return nn
 end
 
-function propagate(nnet::Nnet, x::VecOrMat)
+function propagate(nnet::Nnet, x::AbstractMatrix)
 	timing = Float64[]
 	for c in nnet.components
 		t = time()
