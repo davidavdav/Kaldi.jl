@@ -7,8 +7,8 @@ init!(c::NnetComponent) = c
 propagate(c::NnetComponent, x::Matrix) = mapslices(s -> propagate(c, s), x, 1)
 
 ## splice
-output_dim(c::SpliceComponent) = (c.input_dim - c.const_component_dim) * length(c.context) + c.const_component_dim
-delay(c::SpliceComponent) = maximum(c.context)
+output_dim(c::SpliceComponent) = (c.input_dim - c.const_component_dim) * length(c.delay.context) + c.const_component_dim
+delay(c::SpliceComponent) = maximum(c.delay.context)
 
 ## get a frame from a delay line with index i (∈ d.context), given current vector x
 function getframe(d::Delay, index::Integer, inframe::Vector)
@@ -21,6 +21,7 @@ function getframe(d::Delay, index::Integer, inframe::Vector)
 	end
 end
 
+## push a frame onto the delay line buffer
 function pushframe(d::Delay, inframe::Vector)
 	dim, nbuf = size(d.buffer)
 	length(inframe) == dim || throw(DimensionMismatch("Input frame dimension $(length(inframe)) does not match delay buffer $dim"))
@@ -50,6 +51,18 @@ function propagate{T}(c::SpliceComponent, x::Vector{T})
 	pushframe(c.delay, x[1:dvar])
 	pushframe(c.const_delay, x[dvar+1:end])
 	return vcat(yvar, yconst)
+end
+
+function flush(c::SpliceComponent)
+	dummy = c.delay.buffer[:,end]
+	const_dummy = c.const_delay.buffer[:,end]
+	y = similar(c.delay.buffer, output_dim(c), delay(c))
+	for j in 1:delay(c)
+		yvar = vcat([getframe(c.delay, j-1 + i, dummy) for i in c.delay.context]...)
+		yconst = getframe(c.const_delay, j-1 + c.delay.context[1], const_dummy)
+		y[:,j] = vcat(yvar, yconst)
+	end
+	return y
 end
 
 ## affine
