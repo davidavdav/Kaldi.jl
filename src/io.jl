@@ -69,9 +69,8 @@ function load_ark_matrices(fd::IO)
     return data
 end
 
-## This does no longer work.  Must be the macro that kills it
-load_ark_matrix(s::AbstractString) = open(s) do fd
-    load_ark_matrix(fd)
+load_ark_matrices(s::String) = open(s) do fd
+    load_ark_matrices(fd)
 end
 
 ## save a single matrix with a key

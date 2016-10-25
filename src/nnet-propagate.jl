@@ -8,28 +8,48 @@ propagate(c::NnetComponent, x::Matrix) = mapslices(s -> propagate(c, s), x, 1)
 
 ## splice
 output_dim(c::SpliceComponent) = (c.input_dim - c.const_component_dim) * length(c.context) + c.const_component_dim
+delay(c::SpliceComponent) = maximum(c.context)
+
+## get a frame from a delay line with index i (∈ d.context), given current vector x
+function getframe(d::Delay, index::Integer, inframe::Vector)
+	mini, maxi = extrema(d.context)
+	d.i < maxi && return similar(inframe, length(inframe), 0) ## dim x 0, not type stable!
+	if index >= maxi
+		return inframe
+	else
+		return d.buffer[:, clamp(index - mini + 1, 1, d.i)]
+	end
+end
+
+function pushframe(d::Delay, inframe::Vector)
+	dim, nbuf = size(d.buffer)
+	length(inframe) == dim || throw(DimensionMismatch("Input frame dimension $(length(inframe)) does not match delay buffer $dim"))
+	if d.i < nbuf
+		d.i += 1
+	else
+		d.buffer[:, 1:end-1] = d.buffer[:, 2:end]
+	end
+	nbuf > 0 && (d.buffer[:, d.i] = inframe)
+end
 
 function init!(c::SpliceComponent)
 	fill!(c.buffer, zero(eltype(c.buffer)))
+	c.cursor = 0
 	return c
 end
 
+## Features are column vectors stacked in a matrix (for now)
+
+## This might very well be the hardest function to program
 function propagate{T}(c::SpliceComponent, x::Vector{T})
-	length(x) == c.input_dim || error("Dimension mismatch")
-	var_dim = c.input_dim - c.const_component_dim
-	y = Array(T, output_dim(c))
-	for j in 1:size(c.buffer, 2)-1
-		c.buffer[:,j] = c.buffer[:, j+1]
-	end
-	c.buffer[:, end] = x[1:var_dim]
-	offset = 1 - first(c.context)
-	dest = 0
-	for t in c.context
-		y[dest+(1:var_dim)]	= c.buffer[:, offset + t]
-		dest += var_dim
-	end
-	y[dest+1:end] = x[var_dim+1:end]
-	return y
+	din = length(x)
+	din == c.input_dim || error("Dimension mismatch")
+	dvar = c.input_dim - c.const_component_dim
+	yvar = vcat([getframe(c.delay, i, x[1:dvar]) for i in c.delay.context]...)
+	yconst = getframe(c.const_delay, c.delay.context[1], x[dvar+1:end])
+	pushframe(c.delay, x[1:dvar])
+	pushframe(c.const_delay, x[dvar+1:end])
+	return vcat(yvar, yconst)
 end
 
 ## affine

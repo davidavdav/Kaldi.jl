@@ -38,15 +38,24 @@ type NnetAM{T<:AbstractFloat}
 	nnet::Nnet
 end
 
+type Delay
+	context::Vector{Int32}
+	buffer::Matrix
+	i::Int
+	function Delay(context, dim::Integer, ftype=Float32)
+		nbuf = maximum(context) - min(minimum(context), 0)
+		new(context, zeros(ftype, dim, nbuf), 0)
+	end
+end
+
 type SpliceComponent <: NnetComponent
 	input_dim::Int32
-	context::Vector{Int32}
 	const_component_dim::Int32
-	buffer::Matrix
+	delay::Delay
+	const_delay::Delay
 	function SpliceComponent(input_dim, context, const_component_dim, ftype=Float32)
 		var_dim = input_dim - const_component_dim
-		history_dim = 1 - -(extrema(context)...)
-		new(input_dim, context, const_component_dim, zeros(ftype, var_dim, history_dim)) ## TODO weasle in the type of the buffer, somehow
+		new(input_dim, const_component_dim, Delay(context, var_dim, ftype), Delay(context, const_component_dim, ftype))
 	end
 end
 
