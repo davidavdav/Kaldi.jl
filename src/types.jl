@@ -40,7 +40,7 @@ end
 
 type Delay
 	context::Vector{Int32}
-	buffer::Matrix
+	buffer::AbstractMatrix
 	i::Int
 	function Delay(context, dim::Integer, ftype=Float32)
 		nbuf = maximum(context) - min(minimum(context), 0)
@@ -52,10 +52,10 @@ type SpliceComponent <: NnetComponent
 	input_dim::Int32
 	const_component_dim::Int32
 	delay::Delay
-	const_delay::Delay
+	# const_delay::Delay
 	function SpliceComponent(input_dim, context, const_component_dim, ftype=Float32)
 		var_dim = input_dim - const_component_dim
-		new(input_dim, const_component_dim, Delay(context, var_dim, ftype), Delay(context, const_component_dim, ftype))
+		new(input_dim, const_component_dim, Delay(context, input_dim, ftype))
 	end
 end
 

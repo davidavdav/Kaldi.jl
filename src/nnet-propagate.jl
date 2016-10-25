@@ -10,19 +10,21 @@ propagate(c::NnetComponent, x::Matrix) = mapslices(s -> propagate(c, s), x, 1)
 output_dim(c::SpliceComponent) = (c.input_dim - c.const_component_dim) * length(c.delay.context) + c.const_component_dim
 delay(c::SpliceComponent) = maximum(c.delay.context)
 
-## get a frame from a delay line with index i (∈ d.context), given current vector x
-function getframe(d::Delay, index::Integer, inframe::Vector)
+## get a frame from a delay line with index i (∈ d.context), given current vector x. Now returns a matrix, because
+## there can be 0 frames returned, this needs to be encoded somehow.
+function getframe(d::Delay, index::Integer, inframe::AbstractVector)
 	mini, maxi = extrema(d.context)
-	d.i < maxi && return similar(inframe, length(inframe), 0) ## dim x 0, not type stable!
+	d.i < maxi && return similar(inframe, length(inframe), 0)
 	if index >= maxi
-		return inframe
+		return reshape(inframe, length(inframe), 1)
 	else
-		return d.buffer[:, clamp(index - mini + 1, 1, d.i)]
+		i = clamp(index - mini + 1, 1, d.i)
+		return d.buffer[:, i:i] ## effective reshape
 	end
 end
 
 ## push a frame onto the delay line buffer
-function pushframe(d::Delay, inframe::Vector)
+function pushframe(d::Delay, inframe::AbstractVector)
 	dim, nbuf = size(d.buffer)
 	length(inframe) == dim || throw(DimensionMismatch("Input frame dimension $(length(inframe)) does not match delay buffer $dim"))
 	if d.i < nbuf
@@ -42,28 +44,29 @@ end
 ## Features are column vectors stacked in a matrix (for now)
 
 ## This might very well be the hardest function to program
-function propagate{T}(c::SpliceComponent, x::Vector{T})
+function propagate{T}(c::SpliceComponent, x::AbstractVector{T})
 	din = length(x)
 	din == c.input_dim || error("Dimension mismatch")
 	dvar = c.input_dim - c.const_component_dim
-	yvar = vcat([getframe(c.delay, i, x[1:dvar]) for i in c.delay.context]...)
-	yconst = getframe(c.const_delay, c.delay.context[1], x[dvar+1:end])
-	pushframe(c.delay, x[1:dvar])
-	pushframe(c.const_delay, x[dvar+1:end])
+	yvar = vcat([getframe(c.delay, i, x)[1:dvar, :] for i in c.delay.context]...)
+	yconst = getframe(c.delay, c.delay.context[1], x)[dvar+1:end, :]
+	pushframe(c.delay, x)
 	return vcat(yvar, yconst)
 end
 
 function flush(c::SpliceComponent)
+	dvar = c.input_dim - c.const_component_dim
 	dummy = c.delay.buffer[:,end]
-	const_dummy = c.const_delay.buffer[:,end]
 	y = similar(c.delay.buffer, output_dim(c), delay(c))
 	for j in 1:delay(c)
-		yvar = vcat([getframe(c.delay, j-1 + i, dummy) for i in c.delay.context]...)
-		yconst = getframe(c.const_delay, j-1 + c.delay.context[1], const_dummy)
+		yvar = vcat([getframe(c.delay, j-1 + i, dummy)[1:dvar, :] for i in c.delay.context]...)
+		yconst = getframe(c.delay, j-1 + c.delay.context[1], dummy)[dvar+1:end, :]
 		y[:,j] = vcat(yvar, yconst)
 	end
 	return y
 end
+
+
 
 ## affine
 ## we need to define two definitions to prevent ambiguities with the catch-all mapslices...
