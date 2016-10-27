@@ -1,6 +1,6 @@
 include("../src/Kaldi.jl")
 
-nnam = open("6.mdl") do fd
+nnam = open("final.mdl") do fd
 	Kaldi.load_nnet_am(fd);
 end
 

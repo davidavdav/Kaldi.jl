@@ -202,7 +202,7 @@ function load_nnet_component(io::IO, ::Type{SpliceComponent}, T::Type)
         error("Unexpected token ", token)
     end
     const_component_dim = readint(io, "<ConstComponentDim>")
-    return SpliceComponent{T}(input_dim, context, const_component_dim)
+    return SpliceComponent{T}(input_dim, const_component_dim, context)
 end
 
 function load_nnet_component(io::IO, ::Type{FixedAffineComponent}, T::Type)

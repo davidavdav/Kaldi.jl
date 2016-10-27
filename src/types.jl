@@ -54,12 +54,12 @@ type SpliceComponent{T} <: NnetComponent
 	const_component_dim::Int32
 	delay::Delay{T}
 	# const_delay::Delay
-	function SpliceComponent(input_dim, context, const_component_dim)
+	function SpliceComponent(input_dim, const_component_dim, context)
 		var_dim = input_dim - const_component_dim
 		new(input_dim, const_component_dim, Delay{T}(context, input_dim))
 	end
 end
-SpliceComponent(input_dim, context, const_component_dim, T::Real) = SpliceComponent{T}(input_dim, context, const_component_dim)
+SpliceComponent(input_dim, const_component_dim, context, T::Type) = SpliceComponent{T}(input_dim, const_component_dim, context)
 
 abstract AbstractAffineComponent <: NnetComponent
 
