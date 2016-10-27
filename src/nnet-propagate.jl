@@ -54,7 +54,7 @@ end
 ## We should define flush() for any component that has a delay
 function flush(c::SpliceComponent)
 	dvar = c.input_dim - c.const_component_dim
-	# delay(c) > 0 || return 
+	# delay(c) > 0 || return
 	lastframe = c.delay.buffer[:,end]
 	y = similar(c.delay.buffer, output_dim(c), delay(c))
 	for j in 1:delay(c)
@@ -93,7 +93,7 @@ function propagate{T}(c::PnormComponent, x::Vector{T})
 end
 
 ## normalize
-propagate(c::NormalizeComponent, x::Vector) = normalize(x)
+propagate(c::NormalizeComponent, x::Vector) = normalize(x) * √length(x)
 
 ## fixed scale
 propagate(c::FixedScaleComponent, x::Vector) = c.scales .* x

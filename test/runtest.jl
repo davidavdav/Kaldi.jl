@@ -1,8 +1,20 @@
 include("../src/Kaldi.jl")
 
-trans, nn = open("final.mdl") do fd
+nnam = open("6.mdl") do fd
 	Kaldi.load_nnet_am(fd);
 end
+
+components = nnam.nnet.components
+
+x = Kaldi.load_ark_matrices("dearmrgabriel.feats.ark")["0"]'
+yref = Kaldi.load_ark_matrices("out.ark")["0"]'
+
+y = copy(x)
+for c in components
+	y = Kaldi.propagate(c, y, true)
+end
+
+if false
 
 x = rand(Float32, 140, 113)
 y = Array(Any, length(nn.components)+1)
@@ -26,4 +38,6 @@ end
 Kaldi.init!(nn)
 for i=1:length(nn.components)
 	prop(nn, z, i)
+end
+
 end
