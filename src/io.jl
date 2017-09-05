@@ -29,35 +29,37 @@ is_binary(io::IO) = read(io, UInt8) == 0 && read(io, Char) == 'B'
 
 ## This loads Kaldi matrices from an ark stream, one at the time
 ## we could probably also use code below
-load_ark_matrix(io::IO) = @task while !eof(io)
-    ## parse the index
-    id = readtoken(io)
-    binary = is_binary(io)
-    binary || error("Only binary format is supported yet")
-    token = readtoken(io)
-    if token == "CM" ## compressed matrix
-        minvalue, range = read(io, Float32, 2)
-        nrow, ncol = read(io, Int32, 2)
-        ret = Array(Float32, nrow, ncol)
-        quantiles = reshape([uint16tofloat(x, minvalue, range) for x in read(io, UInt16, 4*ncol)], (4, Int64(ncol)))
-        for j in 1:ncol
-            bytes = read(io, UInt8, nrow)
-            for i in 1:nrow
-                ret[i, j] = uint8tofloat(bytes[i], sub(quantiles, :, j))
+load_ark_matrix(io::IO) = Channel() do c
+    while !eof(io)
+        ## parse the index
+        id = readtoken(io)
+        binary = is_binary(io)
+        binary || error("Only binary format is supported yet")
+        token = readtoken(io)
+        if token == "CM" ## compressed matrix
+            minvalue, range = read(io, Float32, 2)
+            nrow, ncol = read(io, Int32, 2)
+            ret = Array{Float32}(nrow, ncol)
+            quantiles = reshape([uint16tofloat(x, minvalue, range) for x in read(io, UInt16, 4*ncol)], (4, Int64(ncol)))
+            for j in 1:ncol
+                bytes = read(io, UInt8, nrow)
+                for i in 1:nrow
+                    ret[i, j] = uint8tofloat(bytes[i], view(quantiles, :, j))
+                end
             end
-        end
-        produce(id, ret)
-    else
-        if token == "FM"
-            datatype = Float32
-        elseif token == "DM"
-            datatype = Float64
+            push!(c, (id, ret))
         else
-            error("Unknown token ", token)
+            if token == "FM"
+                datatype = Float32
+            elseif token == "DM"
+                datatype = Float64
+            else
+                error("Unknown token ", token)
+            end
+            nrow = Int64(readint(io))
+            ncol = Int64(readint(io))
+            push!(c, (id, reshape(read(io, datatype, nrow*ncol), (ncol, nrow))'))
         end
-        nrow = Int64(readint(io))
-        ncol = Int64(readint(io))
-        produce(id, reshape(read(io, datatype, nrow*ncol), (ncol, nrow))')
     end
 end
 
@@ -131,10 +133,10 @@ function load_hmm_topology(io::IO)
     phones = readvector(io, Int32)
     phone2idx = readvector(io, Int32)
     len = readint(io)
-    topo = Array(TopologyEntry, len)
+    topo = Array{TopologyEntry}(len)
     for i in 1:len
         n = readint(io)
-        e = Array(HmmState, n)
+        e = Array{HmmState}(n)
         T = Any
         for j in 1:n
             pdf_class = readint(io)

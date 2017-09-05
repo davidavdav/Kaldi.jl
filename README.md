@@ -13,13 +13,15 @@ Pkg.clone("https://github.com/davidavdav/Kaldi.jl.git")
 
 ```julia
 using Kaldi
-for (id, matrix) in load_ark_matrix(f)
+for (id, matrix) in load_ark_matrix(fd)
   println("Key ", id, " matrix ", matrix)
 end
 ```
-Here `f` is [either a file name `::AbstractString` or] an object of type `::IO`.  `load_ark_matrix()` is a generator (coroutine), and returns a `(key, value)` pair on every iteration.  There is also the older `load_ark_matrices()` which reads the entire file and produces an `OrderedDict`, with the matrix IDs as keys in the order as they occur in the `.ark` file.
-
-Matrices have the same sense as in the C++ library, i.e., features are like row vectors.  However, this is a different memory layout, because Julia unfortunately represents matrices column-major.  We may change this in the future, if we would directly interface to the kaldi C++ libraries.
+Here `fd` is an object of type `::IO`, e.g., `open("file.ark")`.  `load_ark_matrix()` is a generator (coroutine), and returns a `(key, value)` pair on every iteration.  There is also `load_ark_matrices()` which reads the entire file and produces an `OrderedDict`, with the matrix IDs as keys in the order as they occur in the `.ark` file:
+```julia
+matrices = load_ark_matrices("file.ark")
+```
+Matrices have the same direction sense as in the C++ library, i.e., features are like row vectors.  However, this is a different memory layout, because Julia unfortunately represents matrices column-major.  We may change this in the future, if we would directly interface to the kaldi C++ libraries.
 
 Currently only matrices of type float, double and compressed (version 1) are supported.   Compressed matrices are expanded to `Float32`.
 
@@ -49,4 +51,4 @@ This reads a tuple `(transition_model, nnet2)` into `nnetam`.
 
 ## Plans
 
-Nothing concrete, but it would be kind-of cool to be able to run the `online/nnet2` pipeline of Kaldi natively in Julia.
+Nothing concrete, but it would be kind-of cool to be able to run the `online/nnet2` pipeline of Kaldi natively in Julia.  Come to think of it, it would be better work on nnet3 support instead.  But then, there is not even a small chance we'll be able to reproduce the nnet3 computation.

@@ -14,6 +14,8 @@ for c in components
 	y = Kaldi.propagate(c, y, true)
 end
 
+println(maximum(abs.(y - yref)))
+
 if false
 
 x = rand(Float32, 140, 113)

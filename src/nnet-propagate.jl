@@ -1,4 +1,4 @@
-import StatsFuns
+ import StatsFuns
 
 ## catch-all rules
 ## most components don't need an init!() or a flush
@@ -79,12 +79,6 @@ end
 ## we need to define two definitions to prevent ambiguities with the catch-all mapslices...
 propagate(c::AbstractAffineComponent, x::Vector) = c.bias_params .+ c.linear_params * x
 propagate(c::AbstractAffineComponent, x::Matrix) = c.bias_params .+ c.linear_params * x
-#function propagate{T}(c::AbstractAffineComponent, x::Matrix{T})
-#	res = zeros(T, length(c.bias_params), size(x, 2))
-#	BLAS.gemm!('N', 'N', one(T), c.linear_params, zero(T), res)
-#	broadcast!(+, res, res, c.bias_params)
-#	return res
-#end
 
 ## (group)pnorm
 function propagate{T}(c::PnormComponent, x::Vector{T})
