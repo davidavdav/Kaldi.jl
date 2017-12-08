@@ -25,6 +25,35 @@ expecttoken(io::IO, token) = (t = readtoken(io)) == token || error("Expected ", 
 #    end
 #end
 
+## This loads a line of an scp, and returns a tuple (id, reader(fd) where id is the id of the record, and fd an open file stread where the data can
+## be read from using `reader`.  We can't deliver a fd.  Well, we can if we read, and then wrap in a IOBuffer... Argh.
+load_scp_record(io::IO) = Channel() do c
+    while !eof(io)
+        line = readline(io)
+        space = search(line, ' ')
+        space > 0 || continue
+        id = line[1:space-1]
+        value = strip(line[space:end])
+        length(value) > 0 || continue
+        offset = 0
+        if endswith(value, '|')
+            cmd = split(value[1:end-1]) ## separate the command from the args for julia
+            fd, process = open(`$cmd`, "r")
+        else
+            m = match(r"^(.*):(\d+)$", value)
+            if m != nothing
+                value = m.captures[1]
+                offset = parse(Int, m.captures[2])
+            end
+            fd = open(value, "r")
+            offset > 0 && seek(fd, offset)
+        end
+        push!(c, (id, IOBuffer(read(fd))))
+        close(fd)
+    end
+end
+
+## reads two bytes from io and checks that these are "\0B"
 is_binary(io::IO) = read(io, UInt8) == 0 && read(io, Char) == 'B'
 
 ## This loads Kaldi matrices from an ark stream, one at the time
@@ -118,14 +147,20 @@ end
 function load_transition_model(io::IO)
     expecttoken(io, "<TransitionModel>")
     topo = load_hmm_topology(io)
-    expecttoken(io, "<Triples>")
-    triples = [Triple(readint(io), readint(io), readint(io)) for i in 1:readint(io)]
-    expecttoken(io, "</Triples>")
+    token = readtoken(io)
+    if token == "<Triples>"
+        tuples = [Tuple4(readint(io), readint(io), readint(io)) for i in 1:readint(io)]
+        expecttoken(io, "</Triples>")
+    elseif token == "<Tuples>"
+        n = readint(io)
+        tuples = [Tuple4(readint(io), readint(io), readint(io), readint(io)) for i in 1:n]
+        expecttoken(io, "</Tuples>")
+    end
     expecttoken(io, "<LogProbs>")
     log_probs = read_kaldi_array(io)
     expecttoken(io, "</LogProbs>")
     expecttoken(io, "</TransitionModel>")
-    return TransitionModel(topo, triples, log_probs)
+    return TransitionModel(topo, tuples, log_probs)
 end
 
 function load_hmm_topology(io::IO)
@@ -133,6 +168,11 @@ function load_hmm_topology(io::IO)
     phones = readvector(io, Int32)
     phone2idx = readvector(io, Int32)
     len = readint(io)
+    hmm = true
+    if len == -1
+        hmm = false
+        len = readint(io)
+    end
     topo = Array{TopologyEntry}(len)
     for i in 1:len
         n = readint(io)
@@ -140,6 +180,9 @@ function load_hmm_topology(io::IO)
         T = Any
         for j in 1:n
             pdf_class = readint(io)
+            if !hmm
+                self_pdf_class = readint(io)
+            end
             t = [Transition(readint(io), readfloat(io)) for k in 1:readint(io)]
             ## we have to be carefull about the type, not sure if this is in any
             if j == 1
@@ -171,24 +214,28 @@ end
 
 function load_nnet(io::IO, T=Float32)
     ## nnet
-    expecttoken(io, "<Nnet>")
-    expecttoken(io, "<NumComponents>")
-    n = readint(io)
-    components = NnetComponent[]
-    expecttoken(io, "<Components>")
-    ## take care of type names, strip off "Kalid." prefix and type parameters
-    componentdict = Dict(replace(split(string(t),".")[end], r"{\w+}", "")  => t for t in recursivesubtypes(NnetComponent))
-    for i in 1:n
-        kind = readtoken(io)[2:end-1] ## remove < >
-        kind ∈ keys(componentdict) || error("Unknown Nnet component ", kind)
-        push!(components, load_nnet_component(io, componentdict[kind], T))
-        expecttoken(io, "</$kind>")
+    token = readtoken(io)
+    if token == "<Nnet>"
+        expecttoken(io, "<NumComponents>")
+        n = readint(io)
+        components = NnetComponent[]
+        expecttoken(io, "<Components>")
+        ## take care of type names, strip off "Kalid." prefix and type parameters
+        componentdict = Dict(replace(split(string(t),".")[end], r"{\w+}", "")  => t for t in recursivesubtypes(NnetComponent))
+        for i in 1:n
+            kind = readtoken(io)[2:end-1] ## remove < >
+            kind ∈ keys(componentdict) || error("Unknown Nnet component ", kind)
+            push!(components, load_nnet_component(io, componentdict[kind], T))
+            expecttoken(io, "</$kind>")
+        end
+        expecttoken(io, "</Components>")
+        expecttoken(io, "</Nnet>")
+        ## priors
+        priors = read_kaldi_array(io)
+        return Nnet(components, priors)
+    elseif token == "<Nnet3>"
+        return nothing
     end
-    expecttoken(io, "</Components>")
-    expecttoken(io, "</Nnet>")
-    ## priors
-    priors = read_kaldi_array(io)
-    return Nnet(components, priors)
 end
 
 function load_nnet_component(io::IO, ::Type{SpliceComponent}, T::Type)

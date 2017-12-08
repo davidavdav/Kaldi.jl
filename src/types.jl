@@ -14,15 +14,26 @@ struct TopologyEntry
 	entry::Vector{HmmState}
 end
 
+## old kaldi transition info
 struct Triple
 	phone::Int32
 	hmm_state::Int32
-	df::Int32
+	forward_pdf::Int32
 end
+
+## new kaldi transition info
+struct Tuple4
+	phone::Int32
+	hmm_state::Int32
+	forward_pdf::Int32
+	self_pdf::Int32
+end
+Tuple4(phone::Int32, hmm_state::Int32, pdf_class::Int32) = Tuple4(phone, hmm_state, pdf_class, pdf_class)
+
 
 struct TransitionModel{T<:AbstractFloat}
 	topo::Vector{TopologyEntry}
-	triples::Vector{Triple}
+	tuples::Vector{Tuple4}
 	log_probs::Vector{T}
 end
 
