@@ -39,6 +39,7 @@ load_scp_record(io::IO) = Channel() do c
         if endswith(value, '|')
             cmd = split(value[1:end-1]) ## separate the command from the args for julia
             fd, process = open(`$cmd`, "r")
+            fd = IOBuffer(read(fd))
         else
             m = match(r"^(.*):(\d+)$", value)
             if m != nothing
@@ -48,7 +49,7 @@ load_scp_record(io::IO) = Channel() do c
             fd = open(value, "r")
             offset > 0 && seek(fd, offset)
         end
-        push!(c, (id, IOBuffer(read(fd))))
+        push!(c, fd)
         close(fd)
     end
 end
