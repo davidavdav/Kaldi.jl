@@ -49,8 +49,38 @@ load_scp_record(io::IO) = Channel() do c
             fd = open(value, "r")
             offset > 0 && seek(fd, offset)
         end
-        push!(c, fd)
+        push!(c, (id, fd))
         close(fd)
+    end
+end
+
+"""Reads a single binary matrix at the current position of io"""
+function load_single_ark_matrix(io::IO)
+    is_binary(io) || error("Only binary format is supported yet")
+    token = readtoken(io)
+    if token == "CM" ## compressed matrix
+        minvalue, range = read(io, Float32, 2)
+        nrow, ncol = read(io, Int32, 2)
+        ret = Array{Float32}(nrow, ncol)
+        quantiles = reshape([uint16tofloat(x, minvalue, range) for x in read(io, UInt16, 4*ncol)], (4, Int64(ncol)))
+        for j in 1:ncol
+            bytes = read(io, UInt8, nrow)
+            for i in 1:nrow
+                ret[i, j] = uint8tofloat(bytes[i], view(quantiles, :, j))
+            end
+        end
+        return ret
+    else
+        if token == "FM"
+            datatype = Float32
+        elseif token == "DM"
+            datatype = Float64
+        else
+            error("Unknown token ", token)
+        end
+        nrow = Int64(readint(io))
+        ncol = Int64(readint(io))
+        return reshape(read(io, datatype, nrow*ncol), (ncol, nrow))'
     end
 end
 
@@ -63,33 +93,7 @@ load_ark_matrix(io::IO) = Channel() do c
     while !eof(io)
         ## parse the index
         id = readtoken(io)
-        binary = is_binary(io)
-        binary || error("Only binary format is supported yet")
-        token = readtoken(io)
-        if token == "CM" ## compressed matrix
-            minvalue, range = read(io, Float32, 2)
-            nrow, ncol = read(io, Int32, 2)
-            ret = Array{Float32}(nrow, ncol)
-            quantiles = reshape([uint16tofloat(x, minvalue, range) for x in read(io, UInt16, 4*ncol)], (4, Int64(ncol)))
-            for j in 1:ncol
-                bytes = read(io, UInt8, nrow)
-                for i in 1:nrow
-                    ret[i, j] = uint8tofloat(bytes[i], view(quantiles, :, j))
-                end
-            end
-            push!(c, (id, ret))
-        else
-            if token == "FM"
-                datatype = Float32
-            elseif token == "DM"
-                datatype = Float64
-            else
-                error("Unknown token ", token)
-            end
-            nrow = Int64(readint(io))
-            ncol = Int64(readint(io))
-            push!(c, (id, reshape(read(io, datatype, nrow*ncol), (ncol, nrow))'))
-        end
+        push!(c, (id, load_single_ark_matrix(io)))
     end
 end
 
