@@ -30,16 +30,15 @@ expecttoken(io::IO, token) = (t = readtoken(io)) == token || error("Expected ", 
 load_scp_record(io::IO) = Channel() do c
     while !eof(io)
         line = readline(io)
-        space = search(line, ' ')
-        space > 0 || continue
-        id = line[1:space-1]
-        value = strip(line[space:end])
+        words = split(line, ' ', limit=2)
+        length(words) == 2 || continue
+        id, value = strip.(words)
         length(value) > 0 || continue
         offset = 0
         if endswith(value, '|')
             cmd = split(value[1:end-1]) ## separate the command from the args for julia
-            fd, process = open(`$cmd`, "r")
-            fd = IOBuffer(read(fd))
+            process = open(`$cmd`, "r")
+            fd = IOBuffer(read(process.out))
         else
             m = match(r"^(.*):(\d+)$", value)
             if m != nothing
@@ -110,7 +109,7 @@ load_ark_matrices(s::String) = open(s) do fd
 end
 
 ## save a single matrix with a key
-function save_ark_matrix{T<:AbstractFloat}(fd::IO, key::String, value::Matrix{T})
+function save_ark_matrix(fd::IO, key::String, value::Matrix{T}) where T<:AbstractFloat
     write(fd, key * " \0B")
     nrow, ncol = size(value)
     if T == Float32
@@ -125,11 +124,11 @@ function save_ark_matrix{T<:AbstractFloat}(fd::IO, key::String, value::Matrix{T}
 end
 
 ## save multiple matrices as dict
-save_ark_matrix{K<:AbstractString,V}(fd::IO, dict::Associative{K,V}) = for (k,v) in dict
+save_ark_matrix(fd::IO, dict::AbstractDict{K,V}) where K<:AbstractString where V = for (k,v) in dict
     save_ark_matrix(fd, k, v)
 end
 
-function save_ark_matrix{K<:AbstractString,T<:AbstractFloat}(fd::IO, keys::Vector{K}, values::Vector{Matrix{T}})
+function save_ark_matrix(fd::IO, keys::Vector{K}, values::Vector{Matrix{T}}) where K<:AbstractString where T<:AbstractFloat
     length(keys) == length(values) || error("Vector length mismatch")
     for (k,v) in zip(keys, values)
         save_ark_matrix(fd, k, v)
@@ -322,7 +321,7 @@ function load_nnet_component(io::IO, ::Type{SoftmaxComponent}, T::Type)
     return SoftmaxComponent{T}(dim, value_sum, deriv_sum, count)
 end
 
-function load_nnet_component{C<:NnetComponent}(io::IO, ::Type{C}, T::Type)
+function load_nnet_component(io::IO, ::Type{C}, T::Type) where C<:NnetComponent
     println(readtoken(io))
 end
 

@@ -41,7 +41,7 @@ end
 ## Features are column vectors stacked in a matrix (for now)
 
 ## This might very well be the hardest function to program
-function propagate{T}(c::SpliceComponent, x::AbstractVector{T})
+function propagate(c::SpliceComponent, x::AbstractVector{T}) where T
 	din = length(x)
 	din == c.input_dim || error("Dimension mismatch")
 	dvar = c.input_dim - c.const_component_dim
@@ -81,7 +81,7 @@ propagate(c::AbstractAffineComponent, x::Vector) = c.bias_params .+ c.linear_par
 propagate(c::AbstractAffineComponent, x::Matrix) = c.bias_params .+ c.linear_params * x
 
 ## (group)pnorm
-function propagate{T}(c::PnormComponent, x::Vector{T})
+function propagate(c::PnormComponent, x::Vector{T}) where T
 	group = c.input_dim ÷ c.output_dim
 	return T[norm(view(x, i:i+group-1), c.P) for i in 1:group:length(x)]
 end

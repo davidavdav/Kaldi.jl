@@ -2,9 +2,9 @@ struct Transition{T<:AbstractFloat}
 	index::Int32
 	prob::T
 end
-Base.eltype{T}(t::Transition{T}) = T
+Base.eltype(t::Transition{T}) where T = T
 
-struct HmmState{TT<:Transition}
+struct HmmState{TT}
 	pdf_class::Int32
 	transitions::Vector{TT}
 end
@@ -106,7 +106,7 @@ struct FixedScaleComponent{T} <: NnetComponent{T}
 	scales::Vector{T}
 end
 
-type SoftmaxComponent{T} <: NnetComponent{T}
+struct SoftmaxComponent{T} <: NnetComponent{T}
 	dim::Int32
 	value_sum::Vector{T}
 	deriv_sum::Vector{T}
